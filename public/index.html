@@ -1,0 +1,208 @@
+<!--Created by Horea Porutiu-->
+<html>
+  <head>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+  </head>
+  <body>
+    <div id = "background">
+      <center><h1>Watson Translate</h1></center>
+      <div id="left">
+        <center><label id="leftLabel">Input</label></center>
+        <select onchange="langTest()" id="source" name="inputLang">
+          <option value="English">English</option>
+          <option value="Spanish">Spanish</option>
+          <option value="Arabic">Arabic</option>
+          <option value="Portuguese">Portuguese</option>
+          <option value="French">French</option>
+        </select>
+      </div>
+      <div id="right">
+        <center><label id="rightLabel">Output</label></center>
+        <select id="target" name="outputLang">
+          <option value="Spanish">Spanish</option>
+          <option value="English">English</option>
+          <option value="Arabic">Arabic</option>
+          <option value="Portuguese">Portuguese</option>
+          <option value="French">French</option>
+        </select>
+      </div>
+      <div id = "textBox">
+        <center>
+          <label for="text"></label>
+          <input type = "text" placeholder="Translate Something..." id= "text" name="text" required>
+        </center>
+      </div>
+      <div>
+        <center>
+          <form name ="login-form" action=javascript:translate()>
+            <input id = "translate" type="submit" value="Translate">
+          </form>
+          <form name ="login-form" action=javascript:startTranscribe()>
+             <input id = "record" type="submit" value="&#xf130;  Record">
+          </form>
+          <form name ="login-form" action=javascript:pronounce()>
+             <input id = "record" type="submit" value="&#xf028; Pronounce">
+          </form>
+          <br>
+          <br>
+          <div id ="transText" ></div>
+          <div id = "myLoader" class="loader"></div>
+        </center>
+    </div>
+        <!-- Start of JavaScript -->
+    <script src="watson-speech.js"></script>
+    <script>
+
+      var outputText = document.getElementById("transText");
+      var btn = document.getElementById("btn");
+
+      var data = {};
+      var loader = document.getElementById("myLoader");
+      loader.hidden = true;
+      var targetLang = document.getElementById("target");
+      //Disable the user from picking English as output at the start of the program,
+      //since English is by default the input
+      targetLang.options[1].disabled = true;
+
+      //This function modifies Watson language translation options based on what user picks.
+      //Watson can only do certain domains.
+      function langTest() {
+        var sourceLang = document.getElementById("source").value;
+        for (i = 0; i < targetLang.options.length; ++i) {
+          targetLang.value = "English";
+          targetLang.options[i].disabled = false;
+        }
+        if (sourceLang != "English") {
+          for (i = 0; i < targetLang.options.length; ++i) {
+            targetLang.value = "English";
+            //diable all options since Watson tranlslates from
+            //Arabic, Spanish, French and Portueguese to English only.
+            if (targetLang.options[i].value != "English") {
+              targetLang.options[i].disabled = true;
+            }
+          }
+        }
+        //Don't let user try to translate from English to English..doesn't make sense.
+        else {
+          targetLang.value = "Spanish";
+          targetLang.options[1].disabled = true;
+        }
+      }
+      //variable that will hold our final translation
+      var outputText = document.getElementById("transText");
+      function translate() {
+        outputText.hidden = true;
+        loader.hidden = false;
+        //load up our data by extracting from text field and drop down menus
+        data.source = document.getElementById("source").value;
+        data.target = document.getElementById("target").value;
+        data.text = document.getElementById("text").value;
+        //need to convert to string to be able to communicate over HTTP
+        var json = JSON.stringify(data);
+        //var nodeKituraUrl = "http://localhost:8080/translates"
+        var OpenWhiskUrl = "https://openwhisk.ng.bluemix.net/api/v1/web/Developer%20Advocate_dev/demo1/test"
+        //Our HttpRequest that will enable us to talk to Watson
+        var ourRequest = new XMLHttpRequest();
+        //TODO: change URL as needed to use different back end services ;)
+        ourRequest.open("POST", OpenWhiskUrl, true);
+        ourRequest.setRequestHeader('Content-type','application/json');
+        ourRequest.onload = function() {
+          if (ourRequest.status == 400) {
+            outputText.innerHTML = "Error, check your network connection.";
+          }
+          else {
+            //set the response from Watson to a div
+            outputText.innerHTML = ourRequest.responseText;
+          }
+          outputText.hidden = false;
+          loader.hidden = true;
+        }
+        ourRequest.send(json);
+      }
+
+      function startTranscribe() {
+
+        var OpenWhiskUrl1 = "https://openwhisk.ng.bluemix.net/api/v1/web/Developer%20Advocate_dev/demo1/speechToText"
+        //Our HttpRequest that will enable us to talk to Watson
+        var getSpeechToTextToken = new XMLHttpRequest();
+        getSpeechToTextToken.open("GET", OpenWhiskUrl1, true);
+
+
+        //ourReq.setRequestHeader('Content-type','text/plain');
+        getSpeechToTextToken.onload = function() {
+          if (getSpeechToTextToken.status == 400) {
+            outputText.innerHTML = "Error, check your network connection.";
+          }
+          else {
+
+            var stream = WatsonSpeech.SpeechToText.recognizeMicrophone({
+              objectMode: true,
+              token: getSpeechToTextToken.responseText,
+              outputElement: '#text' // CSS selector or DOM Element
+            });
+
+            stream.on('error', function(err) {
+              console.log(err);
+            });
+
+            stream.on('data', function(data) {
+              console.log(data);
+              if(data.results[0] && data.results[0].final) {
+                stream.stop();
+                console.log('stop listening.');
+              }
+            });
+          }
+        }
+        getSpeechToTextToken.send();
+      }
+
+      function pronounce() {
+
+        var targetLang = document.getElementById("target").value
+        var voice = ''
+        //match voice to language for smooth pronunciation ;)
+        switch(targetLang) {
+          case "Spanish":
+            voice = 'es-ES_EnriqueVoice';
+            break;
+          case "Portuguese":
+            voice = 'pt-BR_IsabelaVoice'
+            break;
+          case "French":
+            voice = 'fr-FR_ReneeVoice'
+            break;
+          case "English":
+            voice = 'en-US_MichaelVoice'
+            break;
+          default:
+            voice = 'es-ES_EnriqueVoice'
+        }
+
+        var OpenWhiskUrl = "https://openwhisk.ng.bluemix.net/api/v1/web/Developer%20Advocate_dev/demo1/textToSpeech"
+        //Our HttpRequest that will enable us to talk to Watson
+        var getTextToSpeechToken = new XMLHttpRequest();
+        getTextToSpeechToken.open("GET", OpenWhiskUrl, true);
+        //ourReq.setRequestHeader('Content-type','text/plain');
+        getTextToSpeechToken.onload = function() {
+          if (getTextToSpeechToken.status == 400) {
+            outputText.innerHTML = "Error, check your network connection.";
+          }
+          else {
+
+            var Watson = WatsonSpeech.TextToSpeech.synthesize({
+              objectMode: true,
+              voice: voice,
+              token: getTextToSpeechToken.responseText,
+              text: document.getElementById("transText").innerHTML
+            })
+
+          }
+        }
+        getTextToSpeechToken.send();
+      }
+
+    </script>
+  </body>
+</html>
